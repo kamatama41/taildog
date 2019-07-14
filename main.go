@@ -24,7 +24,7 @@ var (
 	limit    = flag.Int("l", 1000, "Number of logs fetched at once.")
 	fromStr  = flag.String("from", "", "Minimum timestamp for requested logs, should be an ISO-8601 string.")
 	toStr    = flag.String("to", "", "Maximum timestamp for requested logs, should be an ISO-8601 string.")
-	version  = flag.Bool("V", false, "Show version of taildog")
+	version  = flag.Bool("version", false, "Show version of taildog.")
 
 	apiKey = getEnv("DD_API_KEY")
 	appKey = getEnv("DD_APP_KEY")
