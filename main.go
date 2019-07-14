@@ -92,8 +92,6 @@ func main() {
 }
 
 func showLogs(cfg *config) (*config, error) {
-	log.Println(cfg.String())
-
 	reqBody := map[string]interface{}{
 		"query": cfg.query,
 		"limit": cfg.limit,
