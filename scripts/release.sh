@@ -41,7 +41,7 @@ for PLATFORM in ${PLATFORMS}; do
   echo "${CMD}"
   eval ${CMD}
 
-  ZIP_FILENAME="${REPO}_${VERSION}_${GOOS}_${GOARCH}.zip"
+  ZIP_FILENAME="${REPO}_v${VERSION}_${GOOS}_${GOARCH}.zip"
   CMD="zip ${ZIP_FILENAME} ${BIN_FILENAME}"
   echo "${CMD}"
   eval ${CMD}
