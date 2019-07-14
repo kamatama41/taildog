@@ -1,0 +1,25 @@
+language: go
+go:
+  - "1.12.x"
+env:
+  global:
+    - GO111MODULE=on
+cache:
+  directories:
+    - $HOME/.cache/go-build
+    - $HOME/gopath/pkg/mod
+
+branches:
+  only:
+    - master
+    - release
+
+script:
+  - make test
+  - make vet
+
+deploy:
+  provider: script
+  script: ./scripts/release.sh
+  on:
+    branch: release
