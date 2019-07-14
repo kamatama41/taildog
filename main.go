@@ -20,8 +20,8 @@ var (
 		"Message format of entries in Golang's template style.\n"+
 			"You can use any field in the \"content\" of the response of the Log Query API.\n"+
 			"https://docs.datadoghq.com/api/?lang=bash#get-a-list-of-logs\n")
-	interval = flag.Int64("i", 15000, "Interval time in milliseconds until the next attempt")
-	limit    = flag.Int("l", 1000, "Number of logs fetched once")
+	interval = flag.Int("i", 15, "Interval time in seconds until the next attempt.")
+	limit    = flag.Int("l", 1000, "Number of logs fetched at once.")
 	fromStr  = flag.String("from", "", "Minimum timestamp for requested logs, should be an ISO-8601 string.")
 	toStr    = flag.String("to", "", "Maximum timestamp for requested logs, should be an ISO-8601 string.")
 	version  = flag.Bool("V", false, "Show version of taildog")
@@ -82,7 +82,7 @@ func main() {
 	}
 
 	for cfg.follow {
-		time.Sleep(time.Duration(*interval) * time.Millisecond)
+		time.Sleep(time.Duration(*interval) * time.Second)
 
 		cfg, err = showLogs(cfg)
 		if err != nil {
@@ -92,8 +92,6 @@ func main() {
 }
 
 func showLogs(cfg *config) (*config, error) {
-	log.Println(cfg.String())
-
 	reqBody := map[string]interface{}{
 		"query": cfg.query,
 		"limit": cfg.limit,
