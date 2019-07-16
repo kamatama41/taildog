@@ -25,9 +25,6 @@ var (
 	fromStr  = flag.String("from", "", "Minimum timestamp for requested logs, should be an ISO-8601 string.")
 	toStr    = flag.String("to", "", "Maximum timestamp for requested logs, should be an ISO-8601 string.")
 	version  = flag.Bool("version", false, "Show version of taildog.")
-
-	apiKey = getEnv("DD_API_KEY")
-	appKey = getEnv("DD_APP_KEY")
 )
 
 type config struct {
@@ -38,6 +35,8 @@ type config struct {
 	tmpl     *template.Template
 	follow   bool
 	lastInfo *logsInfo
+	apiKey   string
+	appKey   string
 }
 
 type logsInfo struct {
@@ -120,7 +119,7 @@ func showLogs(cfg *config) (*logsInfo, error) {
 	}
 
 	url := fmt.Sprintf(
-		"https://api.datadoghq.com/api/v1/logs-queries/list?api_key=%s&application_key=%s", apiKey, appKey)
+		"https://api.datadoghq.com/api/v1/logs-queries/list?api_key=%s&application_key=%s", cfg.apiKey, cfg.appKey)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(reqBodyJson))
 	if err != nil {
 		return nil, err
@@ -204,6 +203,9 @@ func (t myTime) Add(d time.Duration) myTime {
 }
 
 func newConfig() (*config, error) {
+	apiKey := getEnv("DD_API_KEY")
+	appKey := getEnv("DD_APP_KEY")
+
 	tmpl, err := template.New("logLine").Parse(*msgFormat + "\n")
 	if err != nil {
 		return nil, err
@@ -243,6 +245,8 @@ func newConfig() (*config, error) {
 		follow:   follow,
 		tmpl:     tmpl,
 		lastInfo: &logsInfo{},
+		apiKey:   apiKey,
+		appKey:   appKey,
 	}, nil
 }
 
