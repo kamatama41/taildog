@@ -31,13 +31,13 @@ var (
 )
 
 type config struct {
-	query     string
-	from      myTime
-	to        myTime
-	limit     int
-	tmpl      *template.Template
-	nextLogId string
-	follow    bool
+	query    string
+	from     myTime
+	to       myTime
+	limit    int
+	tmpl     *template.Template
+	follow   bool
+	lastInfo *logsInfo
 }
 
 type logsInfo struct {
@@ -76,7 +76,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	cfg, err = showLogs(cfg)
+	logs, err := showLogs(cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -84,14 +84,21 @@ func main() {
 	for cfg.follow {
 		time.Sleep(time.Duration(*interval) * time.Second)
 
-		cfg, err = showLogs(cfg)
+		err = cfg.update(logs)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		logs, err = showLogs(cfg)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 }
 
-func showLogs(cfg *config) (*config, error) {
+func showLogs(cfg *config) (*logsInfo, error) {
+	//println("$$$ " + cfg.String() + " ::: " + time.Now().String())
+
 	reqBody := map[string]interface{}{
 		"query": cfg.query,
 		"limit": cfg.limit,
@@ -101,8 +108,10 @@ func showLogs(cfg *config) (*config, error) {
 		},
 		"sort": "asc",
 	}
-	if cfg.nextLogId != "" {
-		reqBody["startAt"] = cfg.nextLogId
+
+	lastInfo := cfg.lastInfo
+	if lastInfo.NextLogId != "" {
+		reqBody["startAt"] = lastInfo.NextLogId
 	}
 
 	reqBodyJson, err := json.Marshal(reqBody)
@@ -141,15 +150,28 @@ func showLogs(cfg *config) (*config, error) {
 		return nil, err
 	}
 
+	// Remove duplicate logs
+	var logsToDisplay []logInfo
+FilterLoop:
 	for _, l := range logsInfo.Logs {
+		if lastInfo != nil {
+			for _, lastLog := range lastInfo.Logs {
+				if l.Id == lastLog.Id {
+					continue FilterLoop
+				}
+			}
+			logsToDisplay = append(logsToDisplay, l)
+		}
+	}
+
+	for _, l := range logsToDisplay {
 		err := cfg.tmpl.Execute(os.Stdout, l.Content)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	err = cfg.update(logsInfo)
-	return cfg, err
+	return logsInfo, err
 }
 
 func getEnv(key string) string {
@@ -214,18 +236,19 @@ func newConfig() (*config, error) {
 	}
 
 	return &config{
-		query:  *query,
-		from:   from,
-		to:     to,
-		limit:  *limit,
-		follow: follow,
-		tmpl:   tmpl,
+		query:    *query,
+		from:     from,
+		to:       to,
+		limit:    *limit,
+		follow:   follow,
+		tmpl:     tmpl,
+		lastInfo: &logsInfo{},
 	}, nil
 }
 
 func (cfg *config) update(info *logsInfo) error {
-	cfg.nextLogId = info.NextLogId
-	if cfg.nextLogId != "" {
+	cfg.lastInfo = info
+	if info.NextLogId != "" {
 		// There are remaining logs (keep last condition)
 		return nil
 	}
@@ -236,8 +259,7 @@ func (cfg *config) update(info *logsInfo) error {
 		if err != nil {
 			return err
 		}
-		// (Timestamp of the last log) + 1ms, to avoid to show duplicate logs
-		cfg.from = t.Add(time.Duration(1 * time.Millisecond))
+		cfg.from = t
 	}
 	cfg.to = now()
 
@@ -245,5 +267,5 @@ func (cfg *config) update(info *logsInfo) error {
 }
 
 func (cfg *config) String() string {
-	return fmt.Sprintf("%s %s %s", cfg.from.Format(time.RFC3339Nano), cfg.to.Format(time.RFC3339Nano), cfg.nextLogId)
+	return fmt.Sprintf("%s %s %s", cfg.from.Format(time.RFC3339Nano), cfg.to.Format(time.RFC3339Nano), cfg.lastInfo.NextLogId)
 }
