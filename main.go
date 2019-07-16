@@ -19,25 +19,24 @@ var (
 	msgFormat = flag.String("f", "{{.Timestamp}} {{.Host}} {{.Service}} {{.Message}}",
 		"Message format of entries in Golang's template style.\n"+
 			"You can use any field in the \"content\" of the response of the Log Query API.\n"+
-			"https://docs.datadoghq.com/api/?lang=bash#get-a-list-of-logs\n")
+			"https://docs.datadoghq.com/api/#get-a-list-of-logs\n")
 	interval = flag.Int("i", 15, "Interval time in seconds until the next attempt.")
 	limit    = flag.Int("l", 1000, "Number of logs fetched at once.")
-	fromStr  = flag.String("from", "", "Minimum timestamp for requested logs, should be an ISO-8601 string.")
-	toStr    = flag.String("to", "", "Maximum timestamp for requested logs, should be an ISO-8601 string.")
+	fromStr  = flag.String("from", "", "Minimum timestamp for requested logs. See https://docs.datadoghq.com/api/#get-a-list-of-logs for more details of its format.")
+	toStr    = flag.String("to", "", "Maximum timestamp for requested logs. See https://docs.datadoghq.com/api/#get-a-list-of-logs for more details of its format.")
 	version  = flag.Bool("version", false, "Show version of taildog.")
-
-	apiKey = getEnv("DD_API_KEY")
-	appKey = getEnv("DD_APP_KEY")
 )
 
 type config struct {
 	query    string
-	from     myTime
-	to       myTime
+	from     string
+	to       string
 	limit    int
 	tmpl     *template.Template
 	follow   bool
 	lastInfo *logsInfo
+	apiKey   string
+	appKey   string
 }
 
 type logsInfo struct {
@@ -58,10 +57,6 @@ type logContent struct {
 	Host       string                 `json:"host"`
 	Service    string                 `json:"service"`
 	Message    string                 `json:"message"`
-}
-
-type myTime struct {
-	time.Time
 }
 
 func main() {
@@ -97,14 +92,14 @@ func main() {
 }
 
 func showLogs(cfg *config) (*logsInfo, error) {
-	//println("$$$ " + cfg.String() + " ::: " + time.Now().String())
+	//cfg.Debug()
 
 	reqBody := map[string]interface{}{
 		"query": cfg.query,
 		"limit": cfg.limit,
-		"time": map[string]int64{
-			"from": cfg.from.UnixMillis(),
-			"to":   cfg.to.UnixMillis(),
+		"time": map[string]string{
+			"from": cfg.from,
+			"to":   cfg.to,
 		},
 		"sort": "asc",
 	}
@@ -120,7 +115,7 @@ func showLogs(cfg *config) (*logsInfo, error) {
 	}
 
 	url := fmt.Sprintf(
-		"https://api.datadoghq.com/api/v1/logs-queries/list?api_key=%s&application_key=%s", apiKey, appKey)
+		"https://api.datadoghq.com/api/v1/logs-queries/list?api_key=%s&application_key=%s", cfg.apiKey, cfg.appKey)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(reqBodyJson))
 	if err != nil {
 		return nil, err
@@ -182,57 +177,32 @@ func getEnv(key string) string {
 	return ""
 }
 
-func now() myTime {
-	return newTime(time.Now())
-}
-
-func newTime(t time.Time) myTime {
-	return myTime{t}
-}
-
-func parseTime(str string) (myTime, error) {
-	t, err := time.Parse(time.RFC3339, str)
-	return newTime(t), err
-}
-
-func (t myTime) UnixMillis() int64 {
-	return t.UnixNano() / 1000000
-}
-
-func (t myTime) Add(d time.Duration) myTime {
-	return myTime{t.Time.Add(d)}
+func formatTime(t time.Time) string {
+	return t.Format(time.RFC3339Nano)
 }
 
 func newConfig() (*config, error) {
+	apiKey := getEnv("DD_API_KEY")
+	appKey := getEnv("DD_APP_KEY")
+
 	tmpl, err := template.New("logLine").Parse(*msgFormat + "\n")
 	if err != nil {
 		return nil, err
 	}
 
-	var from, to myTime
-	if *fromStr != "" {
-		from, err = parseTime(*fromStr)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if *toStr != "" {
-		to, err = parseTime(*toStr)
-		if err != nil {
-			return nil, err
-		}
-	}
+	from := *fromStr
+	to := *toStr
 
-	if (from.IsZero() && !to.IsZero()) || (!from.IsZero() && to.IsZero()) {
+	if (from == "" && to != "") || (from != "" && to == "") {
 		return nil, fmt.Errorf("both 'from' and 'to' must be set")
 	}
 
 	follow := false
-	if from.IsZero() && to.IsZero() {
+	if from == "" && to == "" {
 		follow = true
 		// First attempt for the follow mode, retrieve logs from 30 seconds ago
-		from = now().Add(time.Duration(-30 * time.Second))
-		to = now()
+		from = formatTime(time.Now().Add(time.Duration(-30 * time.Second)))
+		to = formatTime(time.Now())
 	}
 
 	return &config{
@@ -243,6 +213,8 @@ func newConfig() (*config, error) {
 		follow:   follow,
 		tmpl:     tmpl,
 		lastInfo: &logsInfo{},
+		apiKey:   apiKey,
+		appKey:   appKey,
 	}, nil
 }
 
@@ -254,18 +226,13 @@ func (cfg *config) update(info *logsInfo) error {
 	}
 
 	if len(info.Logs) != 0 {
-		ts := info.Logs[len(info.Logs)-1].Content.Timestamp
-		t, err := parseTime(ts)
-		if err != nil {
-			return err
-		}
-		cfg.from = t
+		cfg.from = info.Logs[len(info.Logs)-1].Content.Timestamp
 	}
-	cfg.to = now()
+	cfg.to = formatTime(time.Now())
 
 	return nil
 }
 
-func (cfg *config) String() string {
-	return fmt.Sprintf("%s %s %s", cfg.from.Format(time.RFC3339Nano), cfg.to.Format(time.RFC3339Nano), cfg.lastInfo.NextLogId)
+func (cfg *config) Debug() {
+	println(fmt.Sprintf("[%s] from:%s, to:%s, nextLogId:%s", time.Now().Format(time.RFC3339), cfg.from, cfg.to, cfg.lastInfo.NextLogId))
 }
