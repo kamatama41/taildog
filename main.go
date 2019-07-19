@@ -20,11 +20,13 @@ var (
 		"Message format of entries in Golang's template style.\n"+
 			"You can use any field in the \"content\" of the response of the Log Query API.\n"+
 			"https://docs.datadoghq.com/api/#get-a-list-of-logs\n")
-	interval = flag.Int("i", 15, "Interval time in seconds until the next attempt.")
-	limit    = flag.Int("l", 1000, "Number of logs fetched at once.")
-	fromStr  = flag.String("from", "", "Minimum timestamp for requested logs. See https://docs.datadoghq.com/api/#get-a-list-of-logs for more details of its format.")
-	toStr    = flag.String("to", "", "Maximum timestamp for requested logs. See https://docs.datadoghq.com/api/#get-a-list-of-logs for more details of its format.")
-	version  = flag.Bool("version", false, "Show version of taildog.")
+	interval   = flag.Int("i", 15, "Interval time in seconds until the next attempt.")
+	limit      = flag.Int("l", 1000, "Number of logs fetched at once.")
+	fromStr    = flag.String("from", "", "Minimum timestamp for requested logs. See https://docs.datadoghq.com/api/#get-a-list-of-logs for more details of its format.")
+	toStr      = flag.String("to", "", "Maximum timestamp for requested logs. See https://docs.datadoghq.com/api/#get-a-list-of-logs for more details of its format.")
+	versionFlg = flag.Bool("version", false, "Show version of taildog.")
+
+	version = "dev"
 )
 
 type config struct {
@@ -68,8 +70,8 @@ func (a attributes) String() string {
 
 func main() {
 	flag.Parse()
-	if *version {
-		println(VERSION)
+	if *versionFlg {
+		println(version)
 		return
 	}
 
