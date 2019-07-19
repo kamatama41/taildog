@@ -6,7 +6,7 @@ test:
 	go test ./...
 
 build:
-	go build -o $(NAME)
+	goreleaser --snapshot --skip-publish --rm-dist
 
 release:
 	./scripts/release.sh
