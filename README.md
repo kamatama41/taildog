@@ -9,8 +9,8 @@ You can download the executable binary from the [releases page](https://github.c
 ```console
 $ latest=$(curl -s https://api.github.com/repos/kamatama41/taildog/releases/latest | jq -r ".name")
 $ os=$(uname)
-$ curl -LO https://github.com/kamatama41/taildog/releases/download/${latest}/taildog_${latest}_${os}_amd64.zip
-$ unzip taildog_${latest}_${os}_amd64.zip && rm taildog_${latest}_${os}_amd64.zip
+$ curl -LO https://github.com/kamatama41/taildog/releases/download/${latest}/taildog_${latest:1}_${os}_amd64.zip
+$ unzip taildog_${latest:1}_${os}_amd64.zip && rm taildog_${latest:1}_${os}_amd64.zip
 ```
 
 # Usage
@@ -40,7 +40,11 @@ $ taildog -q "service:my-app" --from 2019-07-10T11:00:00Z --to 2019-07-10T11:00:
 #### Show logs with a custom format
 
 ```console
-$ taildog -q "service:my-app" -f "{{.Timestamp}} {{.Message}}"
+# Customize header
+$ taildog -q "service:my-app" -h "{{.Timestamp}}: "
+
+# Customize message
+$ taildog -q "service:my-app" -m "{{.Attributes.my_message}}"
 ```
 
 # Note
