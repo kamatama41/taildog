@@ -12,19 +12,20 @@ REPO=taildog
 git config --local user.email "shiketaudonko41@gmail.com"
 git config --local user.name "${GITHUB_USER}"
 git remote -v
-git remote add kamatama41 https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/kamatama41/${REPO}.git
-git fetch kamatama41
-git checkout -b master kamatama41/master
+git remote add github https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/kamatama41/${REPO}.git
+git fetch github
+git checkout -b master github/master
 
 PROJECT_ROOT=$(cd $(dirname $0)/..; pwd)
 VERSION_FILE=${PROJECT_ROOT}/version
 VERSION=$(cat ${VERSION_FILE})
 
-git tag -a ${VERSION} -m " release"
-git push origin ${VERSION}
+git tag -a ${VERSION} -m "Release ${VERSION}"
+git push github ${VERSION}
 
 curl -sL https://git.io/goreleaser | bash
 
+gem install semantic
 script=$(cat << EOS
 require 'semantic'
 puts Semantic::Version.new(gets[1..-1]).increment!(:patch)
