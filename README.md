@@ -8,7 +8,7 @@ You can download the executable binary from the [releases page](https://github.c
 
 ```console
 $ latest=$(curl -s https://api.github.com/repos/kamatama41/taildog/releases/latest | jq -r ".name")
-$ os=$(uname | tr '[:upper:]' '[:lower:]')
+$ os=$(uname)
 $ curl -LO https://github.com/kamatama41/taildog/releases/download/${latest}/taildog_${latest}_${os}_amd64.zip
 $ unzip taildog_${latest}_${os}_amd64.zip && rm taildog_${latest}_${os}_amd64.zip
 ```
