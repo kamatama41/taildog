@@ -40,4 +40,4 @@ EOS
 echo "## Bump up the version to ${NEXT_VERSION}"
 git add ${VERSION_FILE}
 git commit -m "Bump up to the next version"
-git push kamatama41 master
+git push github master
