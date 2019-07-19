@@ -16,15 +16,17 @@ import (
 var (
 	query = flag.String("q", "",
 		"Search query. See https://docs.datadoghq.com/logs/explorer/search/ for more details of query.")
-	msgFormat = flag.String("f", "{{.Timestamp}} {{.Host}} {{.Service}} {{.Message}}",
+	msgFormat = flag.String("f", "{{.Timestamp}} {{.Host}} {{.Service}} {{.Message}} {{.Attributes}}",
 		"Message format of entries in Golang's template style.\n"+
 			"You can use any field in the \"content\" of the response of the Log Query API.\n"+
 			"https://docs.datadoghq.com/api/#get-a-list-of-logs\n")
-	interval = flag.Int("i", 15, "Interval time in seconds until the next attempt.")
-	limit    = flag.Int("l", 1000, "Number of logs fetched at once.")
-	fromStr  = flag.String("from", "", "Minimum timestamp for requested logs. See https://docs.datadoghq.com/api/#get-a-list-of-logs for more details of its format.")
-	toStr    = flag.String("to", "", "Maximum timestamp for requested logs. See https://docs.datadoghq.com/api/#get-a-list-of-logs for more details of its format.")
-	version  = flag.Bool("version", false, "Show version of taildog.")
+	interval   = flag.Int("i", 15, "Interval time in seconds until the next attempt.")
+	limit      = flag.Int("l", 1000, "Number of logs fetched at once.")
+	fromStr    = flag.String("from", "", "Minimum timestamp for requested logs. See https://docs.datadoghq.com/api/#get-a-list-of-logs for more details of its format.")
+	toStr      = flag.String("to", "", "Maximum timestamp for requested logs. See https://docs.datadoghq.com/api/#get-a-list-of-logs for more details of its format.")
+	versionFlg = flag.Bool("version", false, "Show version of taildog.")
+
+	version = "dev"
 )
 
 type config struct {
@@ -51,18 +53,25 @@ type logInfo struct {
 }
 
 type logContent struct {
-	Timestamp  string                 `json:"timestamp"`
-	Tags       []string               `json:"tags"`
-	Attributes map[string]interface{} `json:"attributes"`
-	Host       string                 `json:"host"`
-	Service    string                 `json:"service"`
-	Message    string                 `json:"message"`
+	Timestamp  string     `json:"timestamp"`
+	Tags       []string   `json:"tags"`
+	Attributes attributes `json:"attributes"`
+	Host       string     `json:"host"`
+	Service    string     `json:"service"`
+	Message    string     `json:"message"`
+}
+
+type attributes map[string]interface{}
+
+func (a attributes) String() string {
+	j, _ := json.Marshal(a)
+	return string(j)
 }
 
 func main() {
 	flag.Parse()
-	if *version {
-		println(VERSION)
+	if *versionFlg {
+		println(version)
 		return
 	}
 
