@@ -5,18 +5,25 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"hash/fnv"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"text/template"
 	"time"
+
+	"github.com/fatih/color"
 )
 
 var (
 	query = flag.String("q", "",
 		"Search query. See https://docs.datadoghq.com/logs/explorer/search/ for more details of query.")
-	msgFormat = flag.String("f", "{{.Timestamp}} {{.Host}} {{.Service}} {{.Message}} {{.Attributes}}",
+	headerFormat = flag.String("h", "{{.Timestamp}} {{.Host}}[{{.Service}}]: ",
+		"Header format of entries in Golang's template style.\n"+
+			"You can use any field in the \"content\" of the response of the Log Query API.\n"+
+			"https://docs.datadoghq.com/api/#get-a-list-of-logs\n")
+	messageFormat = flag.String("m", "{{.Message}}{{json .Attributes}}",
 		"Message format of entries in Golang's template style.\n"+
 			"You can use any field in the \"content\" of the response of the Log Query API.\n"+
 			"https://docs.datadoghq.com/api/#get-a-list-of-logs\n")
@@ -26,19 +33,29 @@ var (
 	toStr      = flag.String("to", "", "Maximum timestamp for requested logs. See https://docs.datadoghq.com/api/#get-a-list-of-logs for more details of its format.")
 	versionFlg = flag.Bool("version", false, "Show version of taildog.")
 
-	version = "dev"
+	version   = "dev"
+	colorList = []*color.Color{
+		color.New(color.FgHiRed),
+		color.New(color.FgHiGreen),
+		color.New(color.FgHiYellow),
+		color.New(color.FgHiBlue),
+		color.New(color.FgHiMagenta),
+		color.New(color.FgHiCyan),
+	}
 )
 
 type config struct {
-	query    string
-	from     string
-	to       string
-	limit    int
-	tmpl     *template.Template
-	follow   bool
-	lastInfo *logsInfo
-	apiKey   string
-	appKey   string
+	query       string
+	from        string
+	to          string
+	limit       int
+	headerTmpl  *template.Template
+	messageTmpl *template.Template
+	logTmpl     *template.Template
+	follow      bool
+	lastInfo    *logsInfo
+	apiKey      string
+	appKey      string
 }
 
 type logsInfo struct {
@@ -53,19 +70,18 @@ type logInfo struct {
 }
 
 type logContent struct {
-	Timestamp  string     `json:"timestamp"`
-	Tags       []string   `json:"tags"`
-	Attributes attributes `json:"attributes"`
-	Host       string     `json:"host"`
-	Service    string     `json:"service"`
-	Message    string     `json:"message"`
+	Timestamp  string                 `json:"timestamp"`
+	Tags       []string               `json:"tags"`
+	Attributes map[string]interface{} `json:"attributes"`
+	Host       string                 `json:"host"`
+	Service    string                 `json:"service"`
+	Message    string                 `json:"message"`
 }
 
-type attributes map[string]interface{}
-
-func (a attributes) String() string {
-	j, _ := json.Marshal(a)
-	return string(j)
+type message struct {
+	Header      string
+	Message     string
+	HeaderColor *color.Color
 }
 
 func main() {
@@ -101,6 +117,41 @@ func main() {
 }
 
 func showLogs(cfg *config) (*logsInfo, error) {
+	logsInfo, err := getLogs(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	var logsToDisplay []message
+FilterLoop:
+	for _, l := range logsInfo.Logs {
+		if cfg.lastInfo != nil {
+			// Remove duplicate logs
+			for _, lastLog := range cfg.lastInfo.Logs {
+				if l.Id == lastLog.Id {
+					continue FilterLoop
+				}
+			}
+		}
+
+		msg, err := newMessage(cfg, l)
+		if err != nil {
+			return nil, err
+		}
+		logsToDisplay = append(logsToDisplay, *msg)
+	}
+
+	for _, l := range logsToDisplay {
+		err := cfg.logTmpl.Execute(os.Stdout, l)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return logsInfo, err
+}
+
+func getLogs(cfg *config) (*logsInfo, error) {
 	//cfg.Debug()
 
 	reqBody := map[string]interface{}{
@@ -154,28 +205,31 @@ func showLogs(cfg *config) (*logsInfo, error) {
 		return nil, err
 	}
 
-	// Remove duplicate logs
-	var logsToDisplay []logInfo
-FilterLoop:
-	for _, l := range logsInfo.Logs {
-		if lastInfo != nil {
-			for _, lastLog := range lastInfo.Logs {
-				if l.Id == lastLog.Id {
-					continue FilterLoop
-				}
-			}
-			logsToDisplay = append(logsToDisplay, l)
-		}
+	return logsInfo, nil
+}
+
+func newMessage(cfg *config, l logInfo) (*message, error) {
+	var hdr bytes.Buffer
+	if err := cfg.headerTmpl.Execute(&hdr, l.Content); err != nil {
+		return nil, err
 	}
 
-	for _, l := range logsToDisplay {
-		err := cfg.tmpl.Execute(os.Stdout, l.Content)
-		if err != nil {
-			return nil, err
-		}
+	var msg bytes.Buffer
+	if err := cfg.messageTmpl.Execute(&msg, l.Content); err != nil {
+		return nil, err
 	}
 
-	return logsInfo, err
+	hash := fnv.New32()
+	if _, err := hash.Write([]byte(l.Content.Host + l.Content.Service)); err != nil {
+		return nil, err
+	}
+	headerColor := colorList[hash.Sum32()%uint32(len(colorList))]
+
+	return &message{
+		Header:      hdr.String(),
+		Message:     msg.String(),
+		HeaderColor: headerColor,
+	}, nil
 }
 
 func getEnv(key string) string {
@@ -194,7 +248,28 @@ func newConfig() (*config, error) {
 	apiKey := getEnv("DD_API_KEY")
 	appKey := getEnv("DD_APP_KEY")
 
-	tmpl, err := template.New("logLine").Parse(*msgFormat + "\n")
+	funcs := map[string]interface{}{
+		"json": func(in interface{}) (string, error) {
+			b, err := json.Marshal(in)
+			if err != nil {
+				return "", err
+			}
+			return string(b), nil
+		},
+		"color": func(color color.Color, text string) string {
+			return color.SprintFunc()(text)
+		},
+	}
+
+	headerTmpl, err := template.New("logHeader").Funcs(funcs).Parse(*headerFormat)
+	if err != nil {
+		return nil, err
+	}
+	messageTmpl, err := template.New("logMessage").Funcs(funcs).Parse(*messageFormat)
+	if err != nil {
+		return nil, err
+	}
+	logTmpl, err := template.New("logContent").Funcs(funcs).Parse("{{color .HeaderColor .Header}}{{.Message}}\n")
 	if err != nil {
 		return nil, err
 	}
@@ -215,15 +290,17 @@ func newConfig() (*config, error) {
 	}
 
 	return &config{
-		query:    *query,
-		from:     from,
-		to:       to,
-		limit:    *limit,
-		follow:   follow,
-		tmpl:     tmpl,
-		lastInfo: &logsInfo{},
-		apiKey:   apiKey,
-		appKey:   appKey,
+		query:       *query,
+		from:        from,
+		to:          to,
+		limit:       *limit,
+		follow:      follow,
+		headerTmpl:  headerTmpl,
+		messageTmpl: messageTmpl,
+		logTmpl:     logTmpl,
+		lastInfo:    &logsInfo{},
+		apiKey:      apiKey,
+		appKey:      appKey,
 	}, nil
 }
 

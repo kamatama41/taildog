@@ -40,7 +40,11 @@ $ taildog -q "service:my-app" --from 2019-07-10T11:00:00Z --to 2019-07-10T11:00:
 #### Show logs with a custom format
 
 ```console
-$ taildog -q "service:my-app" -f "{{.Timestamp}} {{.Message}}"
+# Customize header
+$ taildog -q "service:my-app" -h "{{.Timestamp}}: "
+
+# Customize message
+$ taildog -q "service:my-app" -m "{{.Attributes.my_message}}"
 ```
 
 # Note
