@@ -16,7 +16,7 @@ import (
 var (
 	query = flag.String("q", "",
 		"Search query. See https://docs.datadoghq.com/logs/explorer/search/ for more details of query.")
-	msgFormat = flag.String("f", "{{.Timestamp}} {{.Host}} {{.Service}} {{.Message}}",
+	msgFormat = flag.String("f", "{{.Timestamp}} {{.Host}} {{.Service}} {{.Message}} {{.Attributes}}",
 		"Message format of entries in Golang's template style.\n"+
 			"You can use any field in the \"content\" of the response of the Log Query API.\n"+
 			"https://docs.datadoghq.com/api/#get-a-list-of-logs\n")
@@ -51,12 +51,19 @@ type logInfo struct {
 }
 
 type logContent struct {
-	Timestamp  string                 `json:"timestamp"`
-	Tags       []string               `json:"tags"`
-	Attributes map[string]interface{} `json:"attributes"`
-	Host       string                 `json:"host"`
-	Service    string                 `json:"service"`
-	Message    string                 `json:"message"`
+	Timestamp  string     `json:"timestamp"`
+	Tags       []string   `json:"tags"`
+	Attributes attributes `json:"attributes"`
+	Host       string     `json:"host"`
+	Service    string     `json:"service"`
+	Message    string     `json:"message"`
+}
+
+type attributes map[string]interface{}
+
+func (a attributes) String() string {
+	j, _ := json.Marshal(a)
+	return string(j)
 }
 
 func main() {
