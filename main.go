@@ -244,6 +244,10 @@ func formatTime(t time.Time) string {
 	return t.Format(time.RFC3339Nano)
 }
 
+func parseTime(str string) (time.Time, error) {
+	return time.Parse(time.RFC3339, str)
+}
+
 func newConfig() (*config, error) {
 	apiKey := getEnv("DD_API_KEY")
 	appKey := getEnv("DD_APP_KEY")
@@ -312,7 +316,11 @@ func (cfg *config) update(info *logsInfo) error {
 	}
 
 	if len(info.Logs) != 0 {
-		cfg.from = info.Logs[len(info.Logs)-1].Content.Timestamp
+		lastTimestamp, err := parseTime(info.Logs[len(info.Logs)-1].Content.Timestamp)
+		if err != nil {
+			return err
+		}
+		cfg.from = formatTime(lastTimestamp.Add(time.Duration(-*interval/2) * time.Second))
 	}
 	cfg.to = formatTime(time.Now())
 
