@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"reflect"
 	"text/template"
 	"time"
 
@@ -254,6 +255,9 @@ func newConfig() (*config, error) {
 
 	funcs := map[string]interface{}{
 		"json": func(in interface{}) (string, error) {
+			if in == nil || reflect.ValueOf(in).IsNil() {
+				return "", nil
+			}
 			b, err := json.Marshal(in)
 			if err != nil {
 				return "", err
